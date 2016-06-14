@@ -133,8 +133,7 @@ class optimizeInvest(object):
             print "\n ------ 非券投资组合 ------ \n"
             print("非券组合 = "+expression)
             print("非券收益 = " + str(round(profit, 2)))
-        return [investratio, portfolio, round(profit, 2)]  
-    
+        return [investratio, portfolio, round(profit, 2)]
     
     def usecoupon(self, needinvest, deadline):
         """--- Coupon Model ---"""
@@ -149,10 +148,13 @@ class optimizeInvest(object):
         new_product.index = range(len(new_product))
         
         print new_product
-        print tmp_coupon
+        #print tmp_coupon
         
         newer_product = new_product[new_product.rate == 0.1]
-        newer_coupon  = tmp_coupon.sort_values(by = ["starting", "rate"], ascending=[False, False])
+        newer_coupon  = tmp_coupon[tmp_coupon.starting <= 5000]
+        newer_coupon  = newer_coupon.sort_values(by = ["starting", "rate"], ascending=[False, False])
+        newer_coupon.index = range(len(newer_coupon))
+        print(newer_coupon)
         #newer_coupon  = newer_coupon[newer_coupon.]
         #real_invest  = max(tmp_coupon.starting[0], tmp_product.starting[i])
         if len(newer_product) > 0:
@@ -160,13 +162,16 @@ class optimizeInvest(object):
             if needinvest >= newer_product.starting[0] and needinvest + newer_coupon.rebate[0] <= 5000:
                 couponinvest  = [needinvest + newer_coupon.rebate[0]]
                 couponproduct = [newer_product.product_id[0]]
+                #print(newer_coupon.coupon_id[0])
                 usedcoupon    = [newer_coupon.coupon_id[0]]
                 couponportfolio = [newer_product.rate[0]]
                 needinvest = 0
                 new_product = new_product.drop(0)
                 new_product.index = range(len(new_product))
                 self.product = new_product
-                tmp_coupon   = newer_coupon.drop(0)
+                
+                useed_coupon = tmp_coupon[tmp_coupon.coupon_id == newer_coupon.coupon_id[0]].index
+                tmp_coupon   = tmp_coupon.drop(useed_coupon[0])
                 tmp_coupon.index = range(len(tmp_coupon))
                 
             else :
@@ -177,6 +182,7 @@ class optimizeInvest(object):
                     couponportfolio = []
                 elif needinvest + newer_coupon.rebate[0] > 5000 :
                     couponinvest  = [5000]
+                    print(newer_coupon.coupon_id[0])
                     couponproduct = [newer_product.product_id[0]]
                     usedcoupon    = [newer_coupon.coupon_id[0]]
                     couponportfolio = [newer_product.rate[0]]
@@ -185,7 +191,10 @@ class optimizeInvest(object):
                     new_product.index = range(len(new_product))
                     
                     self.product = new_product
-                    tmp_coupon   = newer_coupon.drop(0)
+                    useed_coupon = tmp_coupon[tmp_coupon.coupon_id == newer_coupon.coupon_id[0]].index
+                    print useed_coupon
+                    tmp_coupon   = tmp_coupon.drop(useed_coupon[0])
+                    #tmp_coupon   = newer_coupon.drop(0)
                     tmp_coupon.index = range(len(tmp_coupon))
                     
         else :
@@ -202,6 +211,8 @@ class optimizeInvest(object):
         iter = 0
         out_tag = 0
         
+        print(tmp_coupon)
+        
         while ( len(tmp_coupon) > 0 and iter <= 5) :
             iter += 1
             print "iter = "+str(iter)
@@ -210,8 +221,9 @@ class optimizeInvest(object):
             #print tmp_coupon
             tmp_product = new_product[new_product.starting <= (tmp_coupon.starting[0] + tmp_coupon.rebate[0])]
             if len(tmp_product) > 0 :
-                tmp_product = tmp_product.sort_values(by = ["rate", "duedays", "starting"], ascending=[False, True, True])
+                tmp_product = tmp_product.sort_values(by = ["rate", "duedays", "starting"], ascending=[False, True, False])
                 tmp_product.index = range(len(tmp_product))
+                #print tmp_product
                 for i in range(len(tmp_product)) :
                     real_invest = max(tmp_coupon.starting[0], tmp_product.starting[i])
                     if needinvest >= (real_invest - tmp_coupon.rebate[0]) :
