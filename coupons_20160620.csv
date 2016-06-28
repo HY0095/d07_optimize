@@ -1,0 +1,5 @@
+coupon_id,starting,rebate,coupon_desc,month
+coupon_01,1000,20,安益,12
+coupon_02,10000,100,安益,12
+coupon_03,10000,300,20周年,6
+coupon_04,50000,800,20周年,6coupon_05,100,20,fresh,6
