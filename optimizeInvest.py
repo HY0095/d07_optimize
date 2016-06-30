@@ -134,6 +134,8 @@ class optimizeInvest(object):
     def usecoupon(self, needinvest, month, freshman):
         """--- Coupon Model ---"""
         topk = 0
+        result_coupon = []
+        result_nocoupon = []
         # 1. Choose coupons which satisfy [duedays <= deadline and real_start <= needinvest ]
         unused_coupon = self.coupon[self.coupon.month <= month]
         unused_coupon = unused_coupon[unused_coupon.real_start <= needinvest]
@@ -164,12 +166,13 @@ class optimizeInvest(object):
                 rebate  = newer_coupon.rebate[0]
                 
                 if (needinvest + rebate) >= newer_product.starting[0] and (needinvest + rebate) <= freshman:
-                    couponinvest  = [needinvest + newer_coupon.rebate[0]]
+                    couponinvest  = [needinvest]
                     couponproduct = [newer_product.product_id[0]]
                     #print(newer_coupon.coupon_id[0])
                     usedcoupon    = [newer_coupon.coupon_id[0]]
                     couponvalue   = [newer_coupon.rebate[0]]
                     #实际收益  
+                    print '实际收益'
                     couponrate    = [1.0*newer_product.rate[0]*newer_product.duedays[0]/365]
                     #年化收益
                     couponportfolio = [newer_product.rate[0]]
@@ -303,8 +306,7 @@ class optimizeInvest(object):
                         couponvalue.append(unused_coupon.rebate[0])
                         couponrate.append(1.0*tmp_product.rate[0]*tmp_product.duedays[0]/365)
                         couponportfolio.append(tmp_product.rate[i])
-                        
-                        #needinvest = needinvest - real_invest + unused_coupon.rebate[0]
+
                         unused_coupon = unused_coupon.drop(0)
                         unused_coupon.index = range(len(unused_coupon))
                         break
@@ -341,10 +343,7 @@ class optimizeInvest(object):
             coupon_invest = ""
             couponrate    = []
             couponprofit  = []
-        #    print "couponprofit  = " + str(couponprofit)
-        #    print "coupon_invest = " + coupon_invest
-        #    pass
-        
+
         #print couponproduct
         if needinvest < min(new_product.starting) :
             if len(couponproduct) > 0 :
@@ -356,15 +355,23 @@ class optimizeInvest(object):
                 print "No Product Satisfy Your Input !!!"
                 sys.exit(21)            
         else :
-            result_01 = self.nocoupon(needinvest, month)
-                
+            result_nocoupon = self.nocoupon(needinvest, month)
+        
+        realprofit   += sum(couponvalue)
+        couponprofit += sum(couponvalue)
+        
+        result_coupon = [couponinvest, couponproduct, usedcoupon, couponvalue, couponrate, couponportfolio]
+        
         print "\n ------ 优惠券投资组合 ------ \n"
         print "优惠券组合 = " + coupon_invest
         print "优惠券抵现 = " + str(couponvalue)
         print "实际收益  = " + str(round(realprofit,2))
         print "年化收益  = " + str(couponprofit)
+        
+        return result_coupon, result_nocoupon
     
     def invest(self, needinvest, month, freshman):
+        
         """--- Optimize Invest --- 
         IF User has coupons, then Coupon Model
         IF User doesn't have coupon, then use No Coupon model
