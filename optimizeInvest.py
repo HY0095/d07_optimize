@@ -3,6 +3,7 @@ from scipy.optimize import minimize
 import pandas as pd
 import os
 import sys
+import json
 
 def dotMultiply(a,b):
     """ dot multiply 
@@ -13,6 +14,7 @@ def dotMultiply(a,b):
     for i in np.arange(len(a)):
         result.append(a[i]*b[i])
     return result
+#***********************************************************************
 
 def formula(a,b):
     """ Formula Expression
@@ -25,6 +27,75 @@ def formula(a,b):
         if i < len(a) -1 :
             exp.append("+")
     return ' '.join(i for i in exp)
+
+#***********************************************************************
+def couponMatchPorduct(coupon_0, product):
+    """ Create Product list for each Product """
+    selectedproduct = pd.DataFrame()
+    dropproduct     = pd.DataFrame()
+    category = ['firstCategoryId', 'secondCategoryId', 'thirdCategoryId', 'fouthCategoryId']
+    for i in range(len(coupon_0['supportCategoryVoList'])):
+        item = coupon_0['supportCategoryVoList'][i]
+        if item["supportFlag"] :
+            for name in item.keys() :
+                if name in category :
+                    selectedproduct = selectedproduct.append(product[product[name] == item[name]])
+        else :
+            for name in item.keys() :
+                if name in category :
+                    dropproduct = dropproduct.append(product[product[name] == item[name]])
+    if len(dropproduct) > 0:
+        droplist = list(dropproduct.index)
+        for i in droplist:
+            selectedproduct = selectedproduct.drop(i)   
+    
+    if len(selectedproduct) > 0 :
+        selectedproduct = selectedproduct.drop_duplicates()
+        
+    return selectedproduct
+
+#********************************************************************
+def productMatchCoupon(product_0, coupon):
+    category = ['firstCategoryId', 'secondCategoryId', 'thirdCategoryId', 'fouthCategoryId']
+    selectcoupon = pd.DataFrame()
+    dropcoupon = pd.DataFrame()
+    for name in list(pd.DataFrame(product_0 ).index):
+        if name in category :
+            for i in range(len(coupon['supportCategoryVoList'])):
+                item = pd.DataFrame(coupon['supportCategoryVoList'][i])
+                column = list(item.columns)
+                if name in column :
+                    underselectcoupon = item[item[name] == product_0[name]]
+                    if len(underselectcoupon) > 0 :
+                        aaa = list(underselectcoupon['supportFlag'])
+                        if aaa[0] :
+                            selectcoupon = selectcoupon.append(coupon.loc[i])
+                        else :
+                            dropcoupon = dropcoupon.append(coupon.loc[i])
+    
+    print selectcoupon
+    if len(selectcoupon) > 0:
+        del selectcoupon['supportCategoryVoList']
+    
+    if len(dropcoupon) > 0:
+        print dropcoupon
+        del dropcoupon['supportCategoryVoList']
+    
+    if len(dropcoupon.index) > 0:
+        for j in dropcoupon.index :
+            selectcoupon = selectcoupon.drop(j)
+    
+    if len(selectcoupon) > 0 :
+        selectcoupon = selectcoupon.drop_duplicates()
+    
+    return selectcoupon
+
+#***********************************************************************
+def json2DataFrame(jsonpath):
+    """ Read Json data into DataFrame """
+    jsondata = json.load(open(jsonpath,'r'))
+    product  = pd.DataFrame(jsondata)
+    return product
 
 class optimizeInvest(object):
     
@@ -39,8 +110,9 @@ class optimizeInvest(object):
                 print("Error : Produc file is not exists !!!")
                 sys.exit(11)
             else :
-                product = pd.read_csv(product_loc)
-                product = product.sort_values(by = ["rate", "month", "starting"], ascending=[False, True, True])
+                #product = pd.read_csv(product_loc)
+                product  = pd.DataFrame(json.load(open(product_loc,'r')))
+                product = product.sort_values(by = ["productRatio", "productDueDays", "minInvestAmount", "maxInvestAmount"], ascending=[False, True, True, False])
                 product.index = range(len(product))
                 self.product = product
                 self.raw_investratio = [0 for i in range(len(product))]
@@ -52,9 +124,10 @@ class optimizeInvest(object):
                 print("Error : Coupon file is not exist !!!")
                 sys.exit(11)
             else :
-                coupon = pd.read_csv(coupon_loc)
-                coupon['rate'] = 1.0*coupon.rebate/(coupon.starting - coupon.rebate)
-                coupon['real_start'] = coupon.starting - coupon.rebate
+                #coupon = pd.read_csv(coupon_loc)
+                coupon  = pd.DataFrame(json.load(open(coupon_loc,'r')))
+                coupon['rate'] = 1.0*coupon.couponAmount/(coupon.couponMinInvestAmount - coupon.couponAmount)
+                coupon['real_start'] = coupon.couponMinInvestAmount - coupon.couponAmount
                 #print coupon
                 coupon = coupon.sort_values(by = ['rate', 'real_start'], ascending = [False, True])
                 coupon.index = range(len(coupon))
@@ -69,13 +142,12 @@ class optimizeInvest(object):
         #print(self.coupon)
         #print(self.product)
     
-    
-    def nocoupon(self, needinvest, month):
+    def nocoupon(self, needinvest, deadline):
         """--- No Coupon Model ---"""
         tmp = 0
         investratio = []
         total = needinvest
-        tmp_product = self.product[self.product.month <= month]
+        tmp_product = self.product[self.product.deadline <= deadline]
         new_product =  tmp_product[tmp_product.starting <= needinvest]
         new_product.index = range(len(new_product))
         prod_cnt    = len(new_product)  
@@ -131,25 +203,31 @@ class optimizeInvest(object):
             print("非券收益 = " + str(round(profit, 2)))
         return [investratio, portfolio, round(profit, 2)]
     
-    def usecoupon(self, needinvest, month, freshman):
+    def usecoupon(self, needinvest, deadline, freshman):
         """--- Coupon Model ---"""
         topk = 0
         result_coupon = []
         result_nocoupon = []
         # 1. Choose coupons which satisfy [duedays <= deadline and real_start <= needinvest ]
-        unused_coupon = self.coupon[self.coupon.month <= month]
+        unused_coupon = self.coupon[self.coupon.deadline <= deadline]
         unused_coupon = unused_coupon[unused_coupon.real_start <= needinvest]
         unused_coupon.index = range(len(unused_coupon))
         # 2. Choose product which satisfy [duedays <= deadline and starting <= needinvest ]
-        new_product = self.product[self.product.month <= month]
+        new_product = self.product[self.product.deadline <= deadline]
         #new_product =  tmp_product[tmp_product.starting <= needinvest]
         new_product.index = range(len(new_product))
         
         #print new_product
         #print unused_coupon
         
-        newer_product = new_product[new_product.rate == 0.1]
-        newer_coupon  = unused_coupon[unused_coupon.coupon_desc == 'fresh']
+        newer_product = new_product[new_product.forNewMemberFlag == True]        
+        # Just for Freshman 
+        if len(newer_product) > 0 :
+            # is a freshman,  first select a best product, then select a best coupon for freahman
+            
+            newer_coupon = newer_product.loc[0]
+            
+        #newer_coupon  = unused_coupon[unused_coupon.coupon_desc == 'fresh']
         if len(newer_coupon) > 0:
             newer_coupon  = newer_coupon.sort_values(by = ["starting", "rate"], ascending=[False, False])
             newer_coupon.index = range(len(newer_coupon))
@@ -210,7 +288,7 @@ class optimizeInvest(object):
                     useed_coupon = unused_coupon[unused_coupon.coupon_id == newer_coupon.coupon_id[0]].index
                     #print useed_coupon
                     unused_coupon   = unused_coupon.drop(useed_coupon[0])
-                    #unused_coupon   = newer_coupon.drop(0)
+                    #unused_coupon  = newer_coupon.drop(0)
                     unused_coupon.index = range(len(unused_coupon))
                     pass
                 pass
@@ -268,7 +346,7 @@ class optimizeInvest(object):
             #print unused_coupon
             tmp_product = new_product[new_product.starting >= (unused_coupon.starting[0] - unused_coupon.rebate[0])]
             tmp_product = tmp_product[tmp_product.starting <= needinvest]
-            tmp_product = tmp_product[tmp_product.month == unused_coupon.month[0]]
+            tmp_product = tmp_product[tmp_product.deadline == unused_coupon.deadline[0]]
             #print tmp_product
             if len(tmp_product) > 0 :
                 tmp_product = tmp_product.sort_values(by = ["starting", "rate"], ascending=[True, False])
@@ -355,12 +433,19 @@ class optimizeInvest(object):
                 print "No Product Satisfy Your Input !!!"
                 sys.exit(21)            
         else :
-            result_nocoupon = self.nocoupon(needinvest, month)
+            result_nocoupon = self.nocoupon(needinvest, deadline)
         
         realprofit   += sum(couponvalue)
         couponprofit += sum(couponvalue)
         
-        result_coupon = [couponinvest, couponproduct, usedcoupon, couponvalue, couponrate, couponportfolio]
+        #result_coupon = [couponinvest, couponproduct, usedcoupon, couponvalue, couponrate, couponportfolio]
+        result_coupon = pd.DataFrame()
+        result_coupon['couponinvest']    = couponinvest
+        result_coupon['couponproduct']   = couponproduct
+        result_coupon['usedcoupon']      = usedcoupon
+        result_coupon['couponvalue']     = couponvalue
+        result_coupon['couponrate']      = couponrate
+        result_coupon['couponportfolio'] = couponportfolio
         
         print "\n ------ 优惠券投资组合 ------ \n"
         print "优惠券组合 = " + coupon_invest
@@ -370,7 +455,7 @@ class optimizeInvest(object):
         
         return result_coupon, result_nocoupon
     
-    def invest(self, needinvest, month, freshman):
+    def invest(self, needinvest, deadline, freshman):
         
         """--- Optimize Invest --- 
         IF User has coupons, then Coupon Model
@@ -379,10 +464,10 @@ class optimizeInvest(object):
         
         if len(self.coupon) == 0:
             print " **** No Coupon Model **** \n"
-            result = self.nocoupon(needinvest, month)
+            result = self.nocoupon(needinvest, deadline)
         else :
             print " Coupon Model !!! "
-            result = self.usecoupon(needinvest, month, freshman)
+            result = self.usecoupon(needinvest, deadline, freshman)
         
         return result
             
