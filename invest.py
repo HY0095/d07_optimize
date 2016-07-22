@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import time
 import os
+import warnings
+warnings.filterwarnings("ignore")
 import json
 import getopt
 
@@ -70,7 +72,7 @@ def productMatchCoupon(product_0, coupon):
     for j, name in enumerate(list(pd.DataFrame(product_0 ).index)):
         if name in category :
             if name == 'allProductSupportFlag' :
-                if coupon.loc[j, 'allProductSupportFlag'] == True :
+                if coupon.loc[j, 'allProductSupportFlag'] == True:
                     selectcoupon = selectcoupon.append(coupon.loc[j])
                     pass
                 else :
@@ -103,15 +105,12 @@ def productMatchCoupon(product_0, coupon):
     return selectcoupon
 
 #***********************************************************************
-
 def json2DataFrame(jsonpath):
     """ Read Json data into DataFrame """
     jsondata = json.load(open(jsonpath,'r'))
     product  = pd.DataFrame(jsondata)
     return product
-
 #***************************************************************************
-
 def cleaninvest(result) :
     columns = list(set(result.productId))
     for i in columns:
@@ -125,8 +124,7 @@ def cleaninvest(result) :
                     result.loc[t, 'incomeTotal'] += tmp1.loc[ii, 'incomeTotal']
                     result = result.drop(ii)
     result.index = xrange(len(result))
-    return result
- 
+    return result   
 #*************************************************************************
 
 class optimizeInvest(object):
@@ -138,14 +136,19 @@ class optimizeInvest(object):
             product_loc = kwargs['product']
             product  = pd.DataFrame(json.loads(product_loc))
             for ii in xrange(len(product)):
-                if product.forNewMemberFlag[ii] == True :
-                    if product.maxInvestAmount[ii] == -1 :
-                        product.loc[ ii,'maxInvestAmount'] = product.loc[ii,'remainInvestAmount']
+                if product.maxInvestAmount[ii] == -1 :
+                    product.loc[ ii,'maxInvestAmount'] = product.loc[ii,'remainInvestAmount']
+                    pass
+                    
+                if product.loc[ii, "remainInvestAmount"] < product.loc[ii, "minInvestAmount"] :
+                    product = product.drop(ii)                    
                         
-            product = product.sort_values(by = ["productRatio", "productDueDays", "minInvestAmount", "maxInvestAmount"], ascending=[False, True, True, False])
+            
             product['realratio'] = 1.0*product.productRatio*product.productDueDays/365
             product['check'] =  product.remainInvestAmount - product.minInvestAmount
+            product = product.sort_values(by = ["realratio", "productDueDays", "minInvestAmount", "maxInvestAmount"], ascending=[False, True, True, False])
             product = product[product.check >= 0]
+            del product['check']
             product.index = xrange(len(product))
             self.product = product
 
@@ -155,21 +158,16 @@ class optimizeInvest(object):
             if len(coupon) > 0:
                 coupon['rate'] = 1.0*coupon.couponAmount/(coupon.couponMinInvestAmount - coupon.couponAmount)
                 coupon['real_start'] = coupon.couponMinInvestAmount - coupon.couponAmount
-                #print coupon
-                coupon = coupon.sort_values(by = ['rate', 'real_start'], ascending = [False, True])
+                coupon = coupon.sort_values(by = ['couponAmount', 'couponMinInvestAmount'], ascending = [False, True])
                 coupon.index = xrange(len(coupon))
                 self.coupon = coupon
-            
-            #print 'self.coupon ='
-            #print self.coupon 
         
         if len(self.product) == 0:
-            print("Error: The Product list is empty !!!")
+            #print("Error: The Product list is empty !!!")
             sys.exit(12)
         else :
             pass
-    
-    
+        
     def nocoupon(self, needinvest, deadline, product):
         """--- No Coupon Model ---"""
         tmp = 0
@@ -193,37 +191,32 @@ class optimizeInvest(object):
         if prod_cnt == 0:
             #print("Warning : No product satisfy the Deadline !!! \n")
             sys.exit(21)
-        inititer = 0
-        while (needinvest > 0) and len(new_product) > 0 and inititer < 20:
-            inititer += 1
+        
+        #print new_product
+        niter = 0
+        maxiter = len(new_product)
+        while (needinvest > 0) and len(new_product) > 0 and niter <= maxiter:
+            niter += 1
             for i in xrange(len(new_product)):
-                if needinvest >= new_product.minInvestAmount[i] :
-                
-                    if new_product.maxInvestAmount[i] == -1 :
-                        tmpinvest = new_product.remainInvestAmount[i]
+                if needinvest >= new_product.loc[i, 'minInvestAmount'] :
+                    if new_product.loc[i, 'maxInvestAmount'] == -1 :
+                        tmpinvest = new_product.loc[i, 'remainInvestAmount']
                     else :
-                        tmpinvest = min(new_product.remainInvestAmount[i], new_product.maxInvestAmount[i])
-
+                        tmpinvest = min(new_product.loc[i, 'remainInvestAmount'], new_product.loc[i, 'maxInvestAmount'])
+                    
                     if needinvest <= tmpinvest :
-                        
-                        investproduct.append(new_product.productId[i])
-                        usedcoupon.append('')
-                        couponvalue.append(0)
-                        realrate.append(1.0*new_product.realratio[i])
-                        yearrate.append(1.0*new_product.productRatio[i])                        
-                        
-                        #integer   = round(needinvest/new_product.perIncAmount[i], 0)
-                        remainder = needinvest%new_product.perIncAmount[i]                        
+
+                        remainder = needinvest%new_product.loc[i, 'perIncAmount']                        
                         integer   = needinvest - remainder
                         
-                        #print needinvest
-                        #print "integer === "
-                        #print integer
-                        #print "remainder ===="
-                        #print remainder
-                        
-                        if round(1.0*remainder/new_product.perIncAmount[i], 2) == 0:
-                            #print "11111111"
+                        if round(1.0*remainder/new_product.loc[i, 'perIncAmount'], 2) == 0:
+                            
+                            investproduct.append(new_product.loc[i, 'productId'])
+                            usedcoupon.append('')
+                            couponvalue.append(0)
+                            realrate.append(1.0*new_product.loc[i, 'realratio'])
+                            yearrate.append(1.0*new_product.loc[i, 'productRatio'])
+                            
                             investamount.append(needinvest)                            
                             realincome.append(needinvest*1.0*new_product.realratio[i])
                             yearincome.append(needinvest*new_product.productRatio[i])
@@ -231,24 +224,31 @@ class optimizeInvest(object):
                             pass
                         else :
                             #print "2222222"
-                            investamount.append(integer)
-                            realincome.append(integer*1.0*new_product.realratio[i])
-                            yearincome.append(integer*new_product.productRatio[i])
-                            needinvest = needinvest - integer
+                            if integer >=  new_product.minInvestAmount[i] :
+                                investproduct.append(new_product.productId[i])
+                                usedcoupon.append('')
+                                couponvalue.append(0)
+                                realrate.append(1.0*new_product.realratio[i])
+                                yearrate.append(1.0*new_product.productRatio[i])
+                                
+                                investamount.append(integer)
+                                realincome.append(integer*1.0*new_product.realratio[i])
+                                yearincome.append(integer*new_product.productRatio[i])
+                                needinvest = needinvest - integer
                             pass
                         
                         pass
-                    else :
-                        investproduct.append(new_product.productId[i])
-                        usedcoupon.append('')
-                        couponvalue.append(0)
-                        realrate.append(1.0*new_product.realratio[i])                        
-                        yearrate.append(new_product.productRatio[i])                        
-                        #integer   = round(new_product.remainInvestAmount[i]/new_product.perIncAmount[i],0)
+                    else :                        
                         remainder = tmpinvest%new_product.perIncAmount[i]
                         integer   = tmpinvest - remainder
                         
                         if round(1.0*remainder/new_product.perIncAmount[i], 2) == 0:
+                            investproduct.append(new_product.productId[i])
+                            usedcoupon.append('')
+                            couponvalue.append(0)
+                            realrate.append(1.0*new_product.realratio[i])
+                            yearrate.append(new_product.productRatio[i])
+                            
                             investamount.append(tmpinvest)
                             realincome.append(tmpinvest*1.0*new_product.realratio[i])
                             yearincome.append(tmpinvest*new_product.productRatio[i])
@@ -256,6 +256,13 @@ class optimizeInvest(object):
                             pass
                         else :
                             if integer >= new_product.minInvestAmount[i] :
+                                
+                                investproduct.append(new_product.productId[i])
+                                usedcoupon.append('')
+                                couponvalue.append(0)
+                                realrate.append(1.0*new_product.realratio[i])
+                                yearrate.append(new_product.productRatio[i]) 
+                                
                                 investamount.append(integer)
                                 realincome.append(integer*1.0*new_product.realratio[i])
                                 yearincome.append(integer*new_product.productRatio[i])
@@ -271,21 +278,17 @@ class optimizeInvest(object):
                     new_product.index = xrange(len(new_product))
                     break
 
+        
         nocouponresult['productId'] = investproduct
-        nocouponresult['investAmount'] = [round(i,2) for i in investamount]
+        nocouponresult['investAmount'] = investamount
         nocouponresult['couponId'] = usedcoupon
-        #nocouponresult['couponvalue'] = couponvalue
-        #nocouponresult['realrate'] = [round(i,3) for i in realrate]
-        nocouponresult['incomeTotal'] = [round(i,2) for i in realincome]
-        #nocouponresult['yearrate'] = yearrate
-        #nocouponresult['yearincome'] = [round(i, 2) for i in yearincome]
+        nocouponresult['incomeTotal'] = realincome
 
         if len(investproduct) == 0:
             #print("Warning: No Optimize Investment Satisfied !!! \n")
-            #print("===================================================")
-            sys.exit(22)
+            sys.exit(12)
                 
-        return nocouponresult
+        return nocouponresult    
     
     def usecoupon(self, needinvest, deadline):
         
@@ -323,14 +326,7 @@ class optimizeInvest(object):
         yearincome = []
         investamount    = []
         
-        newer_product = new_product[new_product.forNewMemberFlag == True]
-        
-        #for ii in range(len(newer_product)):
-        #    if newer_product.maxInvestAmount[ii] == -1 :
-        #        newer_product.loc[ii, 'maxInvestAmount'] = newer_product.remainInvestAmount[ii]
-        #newer_product = newer_product[newer_product.minInvestAmount <= needinvest]
-        #print newer_product
-        #print unused_coupon
+        newer_product = new_product[new_product.forNewMemberFlag == True]        
         
         # Just for Freshman 
         if len(newer_product) > 0 :
@@ -343,14 +339,13 @@ class optimizeInvest(object):
                     pass
                 
                 newer_product.index = xrange(len(newer_product))
-                
+                                
                 if len(unused_coupon) > 0:
                     newer_coupon   = productMatchCoupon(newer_product.loc[0], unused_coupon)
                     pass
                 else :
                     newer_coupon = pd.DataFrame()
                     pass
-                
                 if len(newer_coupon) > 0:
                     newer_coupon  = newer_coupon[newer_coupon.couponMinInvestAmount <= min(newer_product.maxInvestAmount[0], newer_product.remainInvestAmount[0])]
                     newer_coupon  = newer_coupon.sort_values(by = ["couponMinInvestAmount", "rate"], ascending=[False, False])
@@ -376,33 +371,32 @@ class optimizeInvest(object):
                                     integer =  tmpinvest- remainder
                                     if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                                         investamount.append(tmpinvest)
-                                        realincome.append(tmpinvest*1.0*newer_product.realratio[0])
-                                        yearincome.append(tmpinvest*newer_product.productRatio[0])
+                                        realincome.append(tmpinvest*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
+                                        yearincome.append(tmpinvest*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
                                         needinvest = needinvest - tmpinvest + newer_coupon.couponAmount[step]
                                         pass
                                     else :
                                         if integer >= newer_product.minInvestAmount[0] :
                                             investamount.append(integer)
-                                            realincome.append(integer*1.0*newer_product.realratio[0])
-                                            yearincome.append(integer*newer_product.productRatio[0])
+                                            realincome.append(integer*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
+                                            yearincome.append(integer*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
                                             needinvest = needinvest - integer + newer_coupon.couponAmount[step]
                                         pass
                                     pass
                                 else :
-                                    #integer   = round(newer_product.remainInvestAmount[0]/newer_product.perIncAmount[0],0)
                                     remainder = needinvest%newer_product.perIncAmount[0]
                                     integer   = needinvest - remainder
                                     if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                                         investamount.append(needinvest)
-                                        realincome.append(needinvest*1.0*newer_product.realratio[0])
-                                        yearincome.append(needinvest*newer_product.productRatio[0])
+                                        realincome.append(needinvest*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
+                                        yearincome.append(needinvest*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
                                         needinvest    = 0
                                         pass
                                     else :
                                         if integer >= newer_product.minInvestAmount[0] :
                                             investamount.append(integer)
-                                            realincome.append(integer*1.0*newer_product.realratio[0])
-                                            yearincome.append(integer*newer_product.productRatio[0])
+                                            realincome.append(integer*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
+                                            yearincome.append(integer*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
                                             needinvest = needinvest - integer+ newer_coupon.couponAmount[step]
                                         pass
                                     pass
@@ -411,23 +405,24 @@ class optimizeInvest(object):
                         pass
                     else :
                         #print '333333333'
-                        investproduct.append(newer_product.productId[0])
+                        investproduct.append(newer_product.loc[0,'productId'])
                         usedcoupon.append('')
                         couponvalue.append(0)
-                        realrate.append(1.0*newer_product.realratio[0])
-                        yearrate.append(newer_product.productRatio[0])
-                        tmp_invest = min(newer_product.maxInvestAmount[0], newer_product.remainInvestAmount[0])
+                        realrate.append(1.0*newer_product.loc[0, 'realratio'])
+                        yearrate.append(newer_product.loc[0, 'productRatio'])
+                        
+                        tmp_invest = min(newer_product.loc[0, 'maxInvestAmount'], newer_product.loc[0, "remainInvestAmount"])
                         
                         if tmp_invest <= needinvest:
                             #integer   = round(tmp_invest/newer_product.perIncAmount[0],0)
-                            remainder = tmp_invest%newer_product.perIncAmount[0]
+                            remainder = tmp_invest%newer_product.loc[0,'perIncAmount']
                             integer   = tmp_invest - remainder
                             
                             if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                                 investamount.append(tmp_invest)
                                 realincome.append(tmp_invest*1.0*newer_product.realratio[0])
                                 yearincome.append(tmp_invest*newer_product.productRatio[0])
-                                needinvest    = needinvest - tmp_invest
+                                needinvest = needinvest - tmp_invest
                                 pass
                             else :
                                 if integer >= newer_product.minInvestAmount[0] :
@@ -438,14 +433,13 @@ class optimizeInvest(object):
                                 pass
                             pass
                         else :
-                            #integer   = round(needinvest/newer_product.perIncAmount[0],0)
                             remainder = needinvest%newer_product.perIncAmount[0]
                             integer   = needinvest - remainder
                             if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                                 investamount.append(needinvest)
                                 realincome.append(needinvest*1.0*newer_product.realratio[0])
                                 yearincome.append(needinvest*newer_product.productRatio[0])
-                                needinvest = 0
+                                needinvest    = 0
                                 pass
                             else :
                                 if integer >= newer_product.minInvestAmount[0] :
@@ -464,14 +458,10 @@ class optimizeInvest(object):
                     realrate.append(1.0*newer_product.realratio[0])
                     yearrate.append(newer_product.productRatio[0])
                     #print '333333333'
-                    tmp_invest = min(newer_product.maxInvestAmount[0], newer_product.remainInvestAmount[0])
-                    
+                    tmp_invest = min(newer_product.maxInvestAmount[0], newer_product.remainInvestAmount[0])  
                     if tmp_invest <= needinvest:
-                        #print "444444"
-                        #integer   = round(tmp_invest/newer_product.perIncAmount[0],0)
                         remainder = tmp_invest%newer_product.perIncAmount[0]
-                        integer   = tmp_invest - remainder
-                        
+                        integer   = tmp_invest - remainder                        
                         if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                             investamount.append(tmp_invest)
                             realincome.append(tmp_invest*1.0*newer_product.realratio[0])
@@ -487,10 +477,8 @@ class optimizeInvest(object):
                             pass
                         pass
                     else :
-                        #integer   = round(needinvest/newer_product.perIncAmount[0],0)
                         remainder = needinvest%newer_product.perIncAmount[0]
-                        integer   = needinvest - remainder
-                        
+                        integer   = needinvest - remainder                        
                         if round(1.0*remainder/newer_product.perIncAmount[0], 2) == 0:
                             investamount.append(needinvest)
                             realincome.append(needinvest*1.0*newer_product.realratio[0])
@@ -508,17 +496,13 @@ class optimizeInvest(object):
                     pass
                 pass
             pass
-        #print "&&&&&&&&&&&&&&&&&&&&&&&&&"
-        #print unused_coupon
-                
+        
         iter = 0
-        while ( len(unused_coupon) > 0 and iter <= 15) :
+        maxiter = len(unused_coupon)
+        while ( len(unused_coupon) > 0 and iter <= maxiter) :
             iter += 1
-            #print iter
-            #print "needinvest   = " +str(needinvest)
-            # calculate best product for each coupon one by one 
             coupon_0 = unused_coupon.loc[0]
-            
+
             if "allProductSupportFlag" in list(pd.DataFrame(coupon_0).index) :
                 if coupon_0['allProductSupportFlag'] == True :
                     tmp_product = new_product
@@ -527,17 +511,19 @@ class optimizeInvest(object):
             else :
                 tmp_product = couponMatchPorduct(coupon_0, new_product)                     
                 pass
-            tmp_product = tmp_product[tmp_product.minInvestAmount >= (unused_coupon.couponMinInvestAmount[0] - unused_coupon.couponAmount[0])]
+            
+            #tmp_product = tmp_product[tmp_product.minInvestAmount >= (unused_coupon.loc[0,'couponMinInvestAmount'] - unused_coupon.loc[0,'couponAmount'])]
             tmp_product = tmp_product[tmp_product.minInvestAmount <= needinvest]
+            tmp_product = tmp_product[tmp_product.maxInvestAmount >= unused_coupon.loc[0,'couponMinInvestAmount']]
 
             if len(tmp_product) > 0 :
 
                 if len(unused_coupon) == 1:
-                    tmp_product = tmp_product.sort_values(by = ["minInvestAmount", "productRatio"], ascending=[False, False])
+                    tmp_product = tmp_product.sort_values(by = ["realratio","minInvestAmount"], ascending=[False, False])
                     tmp_product.index = xrange(len(tmp_product))
                     pass
                 else :
-                    tmp_product = tmp_product.sort_values(by = ["minInvestAmount", "productRatio"], ascending=[True, False])
+                    tmp_product = tmp_product.sort_values(by = ["realratio","minInvestAmount"], ascending=[False, True])
                     tmp_product.index = xrange(len(tmp_product))
                     pass
                 
@@ -550,10 +536,10 @@ class optimizeInvest(object):
                                 remainder = real_invest%tmp_product.perIncAmount[i]
                                 integer   = real_invest - remainder
                                 if round(1.0*remainder/tmp_product.perIncAmount[i], 2) == 0:
-                                    if real_invest <= tmp_product.remainInvestAmount[i]:
+                                    if real_invest <= tmp_product.maxInvestAmount[i]:
                                         investamount.append(real_invest)
-                                        realincome.append(real_invest*1.0*tmp_product.realratio[i])
-                                        yearincome.append(real_invest*tmp_product.productRatio[i])
+                                        realincome.append(real_invest*1.0*tmp_product.realratio[i] + unused_coupon.couponAmount[0])
+                                        yearincome.append(real_invest*tmp_product.productRatio[i] + unused_coupon.couponAmount[0])
                                         needinvest = needinvest - real_invest
                                         
                                         investproduct.append(tmp_product.productId[i])
@@ -562,15 +548,15 @@ class optimizeInvest(object):
                                         realrate.append(1.0*tmp_product.realratio[i])
                                         yearrate.append(tmp_product.productRatio[i])
                                         
-                                        used_product = new_product[new_product.productId == tmp_product.productId[i]].index
-                                        new_product.loc[ used_product[0], "remainInvestAmount"] -= real_invest
+                                        used_product = new_product[new_product.productId == tmp_product.loc[i, 'productId']].index
+                                        new_product.loc[ used_product[0], "maxInvestAmount"] -= real_invest
 
                                         pass
                                     pass
                                 pass
                             else :
                                 
-                                tmp_invest = min(needinvest, tmp_product.remainInvestAmount[i])
+                                tmp_invest = min(needinvest, tmp_product.maxInvestAmount[i])
                                 
                                 if tmp_invest >= real_invest :
                                     remainder = tmp_invest%tmp_product.perIncAmount[i]
@@ -578,8 +564,8 @@ class optimizeInvest(object):
                                     
                                     if round(1.0*remainder/tmp_product.perIncAmount[i], 2) == 0:
                                         investamount.append(tmp_invest)
-                                        realincome.append(tmp_invest*1.0*tmp_product.realratio[i])
-                                        yearincome.append(tmp_invest*tmp_product.productRatio[i])
+                                        realincome.append(tmp_invest*1.0*tmp_product.realratio[i] + unused_coupon.couponAmount[0])
+                                        yearincome.append(tmp_invest*tmp_product.productRatio[i] + unused_coupon.couponAmount[0])
                                         needinvest = needinvest - tmp_invest
                                         
                                         investproduct.append(tmp_product.productId[i])
@@ -588,45 +574,43 @@ class optimizeInvest(object):
                                         realrate.append(1.0*tmp_product.realratio[i])
                                         yearrate.append(tmp_product.productRatio[i])
                                         
-                                        used_product = new_product[new_product.productId == tmp_product.productId[i]].index
-                                        new_product.loc[ used_product[0], "remainInvestAmount"] -= tmp_invest
+                                        used_product = new_product[new_product.productId == tmp_product.loc[i, 'productId']].index
+                                        new_product.loc[ used_product[0], "maxInvestAmount"] -= tmp_invest
 
                                         pass
                                     else :                                        
                                         if real_invest <= integer:
                                             investamount.append(integer)
-                                            realincome.append(integer*1.0*tmp_product.realratio[i])
-                                            yearincome.append(integer*tmp_product.productRatio[i])
+                                            realincome.append(integer*1.0*tmp_product.loc[i, 'realratio'] + unused_coupon.loc[0, 'couponAmount'])
+                                            yearincome.append(integer*tmp_product.loc[i, 'productRatio'] + unused_coupon.loc[0, 'couponAmount'])
                                             needinvest = needinvest - integer
                                             
-                                            investproduct.append(tmp_product.productId[i])
-                                            usedcoupon.append(unused_coupon.couponId[0])
-                                            couponvalue.append(unused_coupon.couponAmount[0])
-                                            realrate.append(1.0*tmp_product.realratio[i])
-                                            yearrate.append(tmp_product.productRatio[i])
+                                            investproduct.append(tmp_product.loc[i, 'productId'])
+                                            usedcoupon.append(unused_coupon.loc[0, 'couponId'])
+                                            couponvalue.append(unused_coupon.loc[0, 'couponAmount'])
+                                            realrate.append(1.0*tmp_product.loc[i, 'realratio'])
+                                            yearrate.append(tmp_product.loc[i, 'productRatio'])
                                             
-                                            used_product = new_product[new_product.productId == tmp_product.productId[i]].index
-                                            new_product.loc[ used_product[0], "remainInvestAmount"] -= integer 
-
+                                            used_product = new_product[new_product.productId == tmp_product.loc[i,'productId']].index
+                                            new_product.loc[ used_product[0], "maxInvestAmount"] -= integer
                                             pass
                                         pass
                                     pass
                                 pass
                             pass
-                        else :
-                            
+                        else :                            
                             remainder = real_invest%tmp_product.perIncAmount[i]
                             integer   = real_invest - remainder
                             
                             if round(1.0*remainder/tmp_product.perIncAmount[i], 2) == 0:
-                                if real_invest <= tmp_product.remainInvestAmount[i] :
+                                if real_invest <= tmp_product.loc[i, 'maxInvestAmount'] :
                                     investamount.append(real_invest)
-                                    realincome.append(real_invest*1.0*tmp_product.realratio[i])
-                                    yearincome.append(real_invest*tmp_product.productRatio[i])
+                                    realincome.append(real_invest*1.0*tmp_product.realratio[i] + unused_coupon.couponAmount[0])
+                                    yearincome.append(real_invest*tmp_product.productRatio[i] + unused_coupon.couponAmount[0])
                                     needinvest = needinvest - real_invest
                                     
-                                    used_product = new_product[new_product.productId == tmp_product.productId[i]].index
-                                    new_product.loc[ used_product[0], "remainInvestAmount"] -= real_invest
+                                    used_product = new_product[new_product.productId == tmp_product.loc[i,'productId']].index
+                                    new_product.loc[ used_product[0], "maxInvestAmount"] -= real_invest
                                     
                                     investproduct.append(tmp_product.productId[i])
                                     usedcoupon.append(unused_coupon.couponId[0])
@@ -638,9 +622,10 @@ class optimizeInvest(object):
                             pass
                         unused_coupon = unused_coupon.drop(0)
                         unused_coupon.index = xrange(len(unused_coupon))
-                        new_product['check'] = new_product.remainInvestAmount - new_product.minInvestAmount
+                        new_product.loc[:,'check'] = new_product.maxInvestAmount - new_product.minInvestAmount
                         new_product = new_product[new_product.check >= 0]
-                        new_product.index = xrange(len(new_product)) 
+                        del new_product['check']
+                        new_product.index = xrange(len(new_product))
                         break
                         pass
                     else :
@@ -649,27 +634,24 @@ class optimizeInvest(object):
                         else :
                             unused_coupon = unused_coupon.drop(0)
                             unused_coupon.index = xrange(len(unused_coupon))
-                            new_product['check'] = new_product.remainInvestAmount - new_product.minInvestAmount
+                            new_product['check'] = new_product.maxInvestAmount - new_product.minInvestAmount
                             new_product = new_product[new_product.check >= 0]
+                            del new_product['check']
                             new_product.index = xrange(len(new_product))
                             break
                             pass
                         pass
                     pass
-                pass
+                pass            
             else :
                 unused_coupon = unused_coupon.drop(0)
                 unused_coupon.index = xrange(len(unused_coupon))
-                new_product['check'] = new_product.remainInvestAmount - new_product.minInvestAmount
-                new_product = new_product[new_product.check >= 0]
-                new_product.index = xrange(len(new_product))                
-                break
                 pass
 
-        new_product['check'] = new_product.remainInvestAmount - new_product.minInvestAmount
+        new_product['check'] = new_product.maxInvestAmount - new_product.minInvestAmount
         new_product = new_product[new_product.check >= 0]
+        del new_product['check']
         new_product.index = xrange(len(new_product))
-        
         
         if len(new_product) > 0:
             if needinvest >= min(new_product.minInvestAmount):
@@ -678,23 +660,10 @@ class optimizeInvest(object):
         couponresult['productId'] = investproduct
         couponresult['investAmount'] = investamount
         couponresult['couponId'] = usedcoupon
-        #couponresult['couponvalue'] = couponvalue
-        #couponresult['realrate'] = [round(i, 3) for i in realrate]
-        couponresult['incomeTotal'] = [round(i, 2) for i in realincome]
-        #couponresult['yearrate'] = yearrate
-        #couponresult['yearincome'] = [round(i, 2) for i in yearincome]
-        
-        #print couponresult
-        #print "*"*30
-        #print nocouponresult
-        
+        couponresult['incomeTotal'] = realincome        
         investment = couponresult.append(nocouponresult)
         investment.index = xrange(len(investment))
         investment = cleaninvest(investment)
-        
-        #print nocouponresult
-        #print "  *********** The Final Investment *********** \n"
-        #print investment
         
         jsonresult = ''
         
@@ -720,10 +689,6 @@ class optimizeInvest(object):
         IF User doesn't have coupon, then use No Coupon model
         """
         
-        #if len(self.coupon) == 0:            
-        #    result = self.nocoupon(needinvest, deadline, self.product)
-        #else :
-        #    result = self.usecoupon(needinvest, deadline)
         result = self.usecoupon(needinvest, deadline)
         
         return result
