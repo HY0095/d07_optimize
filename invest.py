@@ -66,34 +66,28 @@ def couponMatchPorduct(coupon_0, product):
 
 #********************************************************************
 def productMatchCoupon(product_0, coupon):
-    category = ['allProductSupportFlag', 'firstCategoryId', 'secondCategoryId', 'thirdCategoryId', 'fouthCategoryId']
+
+    category = ['firstCategoryId', 'secondCategoryId', 'thirdCategoryId', 'fouthCategoryId']
     selectcoupon = pd.DataFrame()
     dropcoupon = pd.DataFrame()
-    for j, name in enumerate(list(pd.DataFrame(product_0 ).index)):
-        if name in category :
-            if name == 'allProductSupportFlag' :
-                if coupon.loc[j, 'allProductSupportFlag'] == True:
-                    selectcoupon = selectcoupon.append(coupon.loc[j])
-                    pass
-                else :
-                    for i in xrange(len(coupon['supportCategoryVoList'])):
-                        item = pd.DataFrame(coupon['supportCategoryVoList'][i])
+    
+    for i in xrange(len(coupon)) :
+        if coupon.loc[i, "allProductSupportFlag"] == True:
+            selectcoupon = selectcoupon.append(coupon.loc[i])
+        else :
+            for j, name in enumerate(list(pd.DataFrame(product_0 ).index)):
+                if name in category :
+                    for ii in xrange(len(coupon['supportCategoryVoList'])):
+                        item = pd.DataFrame(coupon['supportCategoryVoList'][ii])
                         column = list(item.columns)
                         if name in column :
                             underselectcoupon = item[item[name] == product_0[name]]
                             if len(underselectcoupon) > 0 :
                                 aaa = list(underselectcoupon['supportFlag'])
                                 if aaa[0] :
-                                    selectcoupon = selectcoupon.append(coupon.loc[i])
+                                    selectcoupon = selectcoupon.append(coupon.loc[ii])
                                 else :
-                                    dropcoupon = dropcoupon.append(coupon.loc[i])
-    
-    #print selectcoupon
-    if len(selectcoupon) > 0:
-        del selectcoupon['supportCategoryVoList']
-    
-    if len(dropcoupon) > 0:
-        del dropcoupon['supportCategoryVoList']
+                                    dropcoupon = dropcoupon.append(coupon.loc[ii])
     
     if len(dropcoupon.index) > 0:
         for j in dropcoupon.index :
@@ -103,6 +97,7 @@ def productMatchCoupon(product_0, coupon):
         selectcoupon = selectcoupon.drop_duplicates()
     
     return selectcoupon
+
 
 #***********************************************************************
 def json2DataFrame(jsonpath):
