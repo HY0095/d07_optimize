@@ -502,6 +502,9 @@ class optimizeInvest(object):
                 if coupon_0['allProductSupportFlag'] == True :
                     tmp_product = new_product
                     pass
+                else :
+                    tmp_product = couponMatchPorduct(coupon_0, new_product)
+                    pass
                 pass
             else :
                 tmp_product = couponMatchPorduct(coupon_0, new_product)                     
@@ -524,7 +527,7 @@ class optimizeInvest(object):
                 
                 for i in xrange(len(tmp_product)) :
                     real_invest = max(unused_coupon.couponMinInvestAmount[0], tmp_product.minInvestAmount[i])
-                    if needinvest >= (real_invest - unused_coupon.couponAmount[0]) :
+                    if needinvest >= real_invest :
 
                         if len(unused_coupon) == 1:
                             if needinvest - 2*real_invest > 0:
