@@ -108,6 +108,7 @@ def json2DataFrame(jsonpath):
 #***************************************************************************
 def cleaninvest(result) :
     columns = list(set(result.productId))
+    result = result.sort_values(by = ["investAmount"], ascending = [True])
     for i in columns:
         tmp1 = result[result.productId == i]
         if len(tmp1) >= 2:
