@@ -659,7 +659,8 @@ class optimizeInvest(object):
         couponresult['productId'] = investproduct
         couponresult['investAmount'] = investamount
         couponresult['couponId'] = usedcoupon
-        couponresult['incomeTotal'] = realincome        
+        couponresult['incomeTotal'] = realincome
+        couponresult['couponvalue'] = couponvalue        
         investment = couponresult.append(nocouponresult)
         investment.index = xrange(len(investment))
         investment = cleaninvest(investment)
