@@ -369,14 +369,14 @@ class optimizeInvest(object):
                                         investamount.append(tmpinvest)
                                         realincome.append(tmpinvest*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
                                         yearincome.append(tmpinvest*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
-                                        needinvest = needinvest - tmpinvest + newer_coupon.couponAmount[step]
+                                        needinvest = needinvest - tmpinvest
                                         pass
                                     else :
                                         if integer >= newer_product.minInvestAmount[0] :
                                             investamount.append(integer)
                                             realincome.append(integer*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
                                             yearincome.append(integer*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
-                                            needinvest = needinvest - integer + newer_coupon.couponAmount[step]
+                                            needinvest = needinvest - integer
                                         pass
                                     pass
                                 else :
@@ -393,7 +393,7 @@ class optimizeInvest(object):
                                             investamount.append(integer)
                                             realincome.append(integer*1.0*newer_product.realratio[0] + newer_coupon.couponAmount[step])
                                             yearincome.append(integer*newer_product.productRatio[0] + newer_coupon.couponAmount[step])
-                                            needinvest = needinvest - integer+ newer_coupon.couponAmount[step]
+                                            needinvest = needinvest - integer
                                         pass
                                     pass
                                 break
